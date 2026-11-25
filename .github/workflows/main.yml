@@ -1,0 +1,87 @@
+#!/bin/bash
+set -e
+
+SDK_JAR=$(find $ANDROID_HOME/platforms -name "android.jar" | sort -V | tail -n 1)
+BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
+
+keytool -genkeypair -v -keystore prank.keystore -alias prank -keyalg RSA -keysize 2048 -validity 10000 -storepass 123456 -keypass 123456 -dname "CN=System,O=Android,C=ID"
+
+# --- APK 1: JEBAKAN ---
+mkdir -p apk1/src/com/prank/error apk1/build
+cat << 'EOF' > apk1/AndroidManifest.xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://android.com" package="com.prank.error" android:versionCode="1" android:versionName="1.0">
+    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="30" />
+    <application android:label="System Service">
+        <activity android:name=".MainActivity" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+EOF
+
+cat << 'EOF' > apk1/src/com/prank/error/MainActivity.java
+package com.prank.error;
+import android.app.*;
+import android.content.*;
+import android.os.Bundle;
+public class MainActivity extends Activity {
+    private BroadcastReceiver rx = new BroadcastReceiver() {
+        public void onReceive(Context c, Intent i) { finishAffinity(); }
+    };
+    protected void onCreate(Bundle b) {
+        super.onCreate(b);
+        registerReceiver(rx, new IntentFilter("com.prank.SEMBUH"));
+        new AlertDialog.Builder(this).setTitle("CRITICAL SYSTEM ERROR 0x8004").setMessage("Memori kernel korup. Akses dibatasi sementara.").setCancelable(false).show();
+    }
+    protected void onDestroy() { super.onDestroy(); unregisterReceiver(rx); }
+}
+EOF
+
+$BUILD_TOOLS/aapt package -f -m -J apk1/src -M apk1/AndroidManifest.xml -I $SDK_JAR -F apk1/build/u.apk
+javac --release 8 -bootclasspath $SDK_JAR -d apk1/build apk1/src/com/prank/error/*.java
+$BUILD_TOOLS/d8 --output apk1/build apk1/build/com/prank/error/*.class
+(cd apk1/build && $BUILD_TOOLS/aapt add u.apk classes.dex)
+$BUILD_TOOLS/apksigner sign --ks prank.keystore --ks-pass pass:123456 --out System_Service.apk apk1/build/u.apk
+
+# --- APK 2: PENAWAR ---
+mkdir -p apk2/src/com/prank/penawar apk2/build
+cat << 'EOF' > apk2/AndroidManifest.xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://android.com" package="com.prank.penawar" android:versionCode="1" android:versionName="1.0">
+    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="30" />
+    <application android:label="Patch Pemulihan">
+        <activity android:name=".MainActivity" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+EOF
+
+cat << 'EOF' > apk2/src/com/prank/penawar/MainActivity.java
+package com.prank.penawar;
+import android.app.Activity;
+import android.content.Intent;
+import android.os.Bundle;
+import android.widget.Toast;
+public class MainActivity extends Activity {
+    protected void onCreate(Bundle b) {
+        super.onCreate(b);
+        sendBroadcast(new Intent("com.prank.SEMBUH"));
+        Toast.makeText(this, "PEMULIHAN SELESAI: Sistem kembali normal.", Toast.LENGTH_LONG).show();
+        finish();
+    }
+}
+EOF
+
+$BUILD_TOOLS/aapt package -f -m -J apk2/src -M apk2/AndroidManifest.xml -I $SDK_JAR -F apk2/build/u.apk
+javac --release 8 -bootclasspath $SDK_JAR -d apk2/build apk2/src/com/prank/penawar/*.java
+$BUILD_TOOLS/d8 --output apk2/build apk2/build/com/prank/penawar/*.class
+(cd apk2/build && $BUILD_TOOLS/aapt add u.apk classes.dex)
+$BUILD_TOOLS/apksigner sign --ks prank.keystore --ks-pass pass:123456 --out Patch_Pemulihan.apk apk2/build/u.apk
